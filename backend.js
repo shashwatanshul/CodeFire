@@ -28,45 +28,22 @@ io.on('connection', (socket) => {
 
   io.emit('updatePlayers', backEndPlayers)
 
-  // socket.on('shoot', ({ x, y, angle }) => {
-  //   projectileId++
+  socket.on('shoot', ({ x, y, angle }) => {
+    projectileId++
 
-  //   const velocity = {
-  //     x: Math.cos(angle) * 5,
-  //     y: Math.sin(angle) * 5
-  //   }
-
-  //   backEndProjectiles[projectileId] = {
-  //     x,
-  //     y,
-  //     velocity,
-  //     playerId: socket.id
-  //   }
-
-  //   console.log(backEndProjectiles)
-  // })
-
-  // In the shoot handler
-  socket.on('shoot', ({ angle, tempId }) => {
-    const player = backEndPlayers[socket.id]
-    if (!player) return
-
-    // Always use server's authoritative position
-    const projectileId = tempId || Date.now().toString()
     const velocity = {
       x: Math.cos(angle) * 5,
       y: Math.sin(angle) * 5
     }
 
     backEndProjectiles[projectileId] = {
-      x: player.x, // SERVER AUTHORITATIVE POSITION
-      y: player.y,
+      x,
+      y,
       velocity,
       playerId: socket.id
     }
 
-    // Immediate update for better sync
-    io.emit('updateProjectiles', backEndProjectiles)
+    console.log(backEndProjectiles)
   })
 
   socket.on('initGame', ({ username, width, height }) => {
@@ -138,64 +115,42 @@ io.on('connection', (socket) => {
 })
 
 // backend ticker
-// In backend.js setInterval callback
 setInterval(() => {
-  // Update projectile positions
+  // update projectile positions
   for (const id in backEndProjectiles) {
-    const projectile = backEndProjectiles[id]
+    backEndProjectiles[id].x += backEndProjectiles[id].velocity.x
+    backEndProjectiles[id].y += backEndProjectiles[id].velocity.y
 
-    // Update position
-    projectile.x += projectile.velocity.x
-    projectile.y += projectile.velocity.y
-
-    // Boundary checks
     const PROJECTILE_RADIUS = 5
     if (
-      projectile.x - PROJECTILE_RADIUS > 1024 ||
-      projectile.x + PROJECTILE_RADIUS < 0 ||
-      projectile.y - PROJECTILE_RADIUS > 576 ||
-      projectile.y + PROJECTILE_RADIUS < 0
+      backEndProjectiles[id].x - PROJECTILE_RADIUS >=
+        backEndPlayers[backEndProjectiles[id].playerId]?.canvas?.width ||
+      backEndProjectiles[id].x + PROJECTILE_RADIUS <= 0 ||
+      backEndProjectiles[id].y - PROJECTILE_RADIUS >=
+        backEndPlayers[backEndProjectiles[id].playerId]?.canvas?.height ||
+      backEndProjectiles[id].y + PROJECTILE_RADIUS <= 0
     ) {
       delete backEndProjectiles[id]
       continue
     }
 
-    // Position validation (anti-cheat)
-    const owner = backEndPlayers[projectile.playerId]
-    if (owner) {
-      const distanceFromOwner = Math.hypot(
-        projectile.x - owner.x,
-        projectile.y - owner.y
-      )
-
-      // Allow projectiles to be max 100ms old (5px/15ms * 7 frames)
-      const maxValidDistance = 5 * (100 / 15) + owner.radius + PROJECTILE_RADIUS
-
-      if (distanceFromOwner > maxValidDistance) {
-        delete backEndProjectiles[id]
-        continue
-      }
-    }
-
-    // Player collision detection
     for (const playerId in backEndPlayers) {
-      const player = backEndPlayers[playerId]
+      const backEndPlayer = backEndPlayers[playerId]
 
-      // Skip collision with owner
-      if (projectile.playerId === playerId) continue
-
-      const distance = Math.hypot(
-        projectile.x - player.x,
-        projectile.y - player.y
+      const DISTANCE = Math.hypot(
+        backEndProjectiles[id].x - backEndPlayer.x,
+        backEndProjectiles[id].y - backEndPlayer.y
       )
 
-      if (distance < PROJECTILE_RADIUS + player.radius) {
-        // Handle score update
-        if (backEndPlayers[projectile.playerId]) {
-          backEndPlayers[projectile.playerId].score += 1
-        }
+      // collision detection
+      if (
+        DISTANCE < PROJECTILE_RADIUS + backEndPlayer.radius &&
+        backEndProjectiles[id].playerId !== playerId
+      ) {
+        if (backEndPlayers[backEndProjectiles[id].playerId])
+          backEndPlayers[backEndProjectiles[id].playerId].score++
 
-        // Remove entities
+        console.log(backEndPlayers[backEndProjectiles[id].playerId])
         delete backEndProjectiles[id]
         delete backEndPlayers[playerId]
         break
@@ -203,13 +158,12 @@ setInterval(() => {
     }
   }
 
-  // Emit updates
   io.emit('updateProjectiles', backEndProjectiles)
   io.emit('updatePlayers', backEndPlayers)
 }, 15)
 
-server.listen(process.env.PORT, () => {
-  console.log(`Example app listening on port`)
+server.listen(port, () => {
+  console.log(`Example app listening on port ${port}`)
 })
 
 console.log('server did load')

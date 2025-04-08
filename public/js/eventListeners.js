@@ -1,32 +1,35 @@
 addEventListener('click', (event) => {
   const canvas = document.querySelector('canvas')
   const { top, left } = canvas.getBoundingClientRect()
-  const player = frontEndPlayers[socket.id]
-
-  if (!player || !player.target) return
-
-  // Calculate angle based on TARGET position (server-authoritative)
-  const angle = Math.atan2(
-    event.clientY - top - player.target.y,
-    event.clientX - left - player.target.x
-  )
-
-  // Client-side prediction with server-aligned position
-  const tempId = `prediction-${Date.now()}-${Math.random()
-    .toString(36)
-    .substr(2, 5)}`
-  const velocity = {
-    x: Math.cos(angle) * 5,
-    y: Math.sin(angle) * 5
+  const playerPosition = {
+    x: frontEndPlayers[socket.id].x,
+    y: frontEndPlayers[socket.id].y
   }
 
-  frontEndProjectiles[tempId] = new Projectile({
-    x: player.target.x, // Use server's target position
-    y: player.target.y,
-    radius: 5,
-    color: player.color,
-    velocity
-  })
+  const angle = Math.atan2(
+    event.clientY - top - playerPosition.y,
+    event.clientX - left - playerPosition.x
+  )
 
-  socket.emit('shoot', { angle, tempId })
+  // const velocity = {
+  //   x: Math.cos(angle) * 5,
+  //   y: Math.sin(angle) * 5
+  // }
+
+  socket.emit('shoot', {
+    x: playerPosition.x,
+    y: playerPosition.y,
+    angle
+  })
+  // frontEndProjectiles.push(
+  //   new Projectile({
+  //     x: playerPosition.x,
+  //     y: playerPosition.y,
+  //     radius: 5,
+  //     color: 'white',
+  //     velocity
+  //   })
+  // )
+
+  console.log(frontEndProjectiles)
 })
