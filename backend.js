@@ -162,7 +162,7 @@ setInterval(() => {
   io.emit('updatePlayers', backEndPlayers)
 }, 15)
 
-server.listen(process.env.PORT, () => {
+server.listen(port, () => {
   console.log(`Example app listening on port`)
 })
 
