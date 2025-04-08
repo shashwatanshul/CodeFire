@@ -46,11 +46,13 @@ io.on('connection', (socket) => {
   //   console.log(backEndProjectiles)
   // })
 
-  socket.on('shoot', ({ angle }) => {
+  socket.on('shoot', ({ angle, tempProjectileId }) => {
     const player = backEndPlayers[socket.id]
     if (!player) return
 
-    projectileId++
+    projectileId = tempProjectileId
+      ? parseInt(tempProjectileId.replace('temp-', ''))
+      : projectileId + 1
 
     const velocity = {
       x: Math.cos(angle) * 5,
@@ -59,7 +61,7 @@ io.on('connection', (socket) => {
 
     backEndProjectiles[projectileId] = {
       x: player.x,
-      y: player.y, // Use server's authoritative position
+      y: player.y,
       velocity,
       playerId: socket.id
     }

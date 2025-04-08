@@ -19,6 +19,16 @@ const frontEndPlayers = {}
 const frontEndProjectiles = {}
 
 socket.on('updateProjectiles', (backEndProjectiles) => {
+  // Remove confirmed temporary projectiles
+  Object.keys(frontEndProjectiles)
+    .filter((id) => id.startsWith('temp'))
+    .forEach((tempId) => {
+      if (backEndProjectiles[tempId.replace('temp-', '')]) {
+        delete frontEndProjectiles[tempId]
+      }
+    })
+
+  // Update projectiles
   for (const id in backEndProjectiles) {
     const backEndProjectile = backEndProjectiles[id]
 
@@ -31,13 +41,18 @@ socket.on('updateProjectiles', (backEndProjectiles) => {
         velocity: backEndProjectile.velocity
       })
     } else {
-      frontEndProjectiles[id].x += backEndProjectiles[id].velocity.x
-      frontEndProjectiles[id].y += backEndProjectiles[id].velocity.y
+      frontEndProjectiles[id].x = backEndProjectile.x
+      frontEndProjectiles[id].y = backEndProjectile.y
+      frontEndProjectiles[id].velocity = backEndProjectile.velocity
     }
   }
 
+  // Cleanup old projectiles
   for (const frontEndProjectileId in frontEndProjectiles) {
-    if (!backEndProjectiles[frontEndProjectileId]) {
+    if (
+      !backEndProjectiles[frontEndProjectileId] &&
+      !frontEndProjectileId.startsWith('temp')
+    ) {
       delete frontEndProjectiles[frontEndProjectileId]
     }
   }
@@ -128,32 +143,37 @@ socket.on('updatePlayers', (backEndPlayers) => {
 let animationId
 function animate() {
   animationId = requestAnimationFrame(animate)
-  // c.fillStyle = 'rgba(0, 0, 0, 0.1)'
   c.clearRect(0, 0, canvas.width, canvas.height)
 
+  // Update players with interpolation
   for (const id in frontEndPlayers) {
-    const frontEndPlayer = frontEndPlayers[id]
+    const player = frontEndPlayers[id]
 
-    // linear interpolation
-    if (frontEndPlayer.target) {
-      frontEndPlayers[id].x +=
-        (frontEndPlayers[id].target.x - frontEndPlayers[id].x) * 0.5
-      frontEndPlayers[id].y +=
-        (frontEndPlayers[id].target.y - frontEndPlayers[id].y) * 0.5
+    if (player.target) {
+      // Store previous position for accurate rendering
+      player.previousX = player.x
+      player.previousY = player.y
+
+      // Apply interpolation
+      player.x += (player.target.x - player.x) * 0.5
+      player.y += (player.target.y - player.y) * 0.5
     }
 
-    frontEndPlayer.draw()
+    player.draw()
   }
 
+  // Update projectiles
   for (const id in frontEndProjectiles) {
-    const frontEndProjectile = frontEndProjectiles[id]
-    frontEndProjectile.draw()
-  }
+    const projectile = frontEndProjectiles[id]
 
-  // for (let i = frontEndProjectiles.length - 1; i >= 0; i--) {
-  //   const frontEndProjectile = frontEndProjectiles[i]
-  //   frontEndProjectile.update()
-  // }
+    // Temporary projectiles use client-side prediction
+    if (id.startsWith('temp')) {
+      projectile.x += projectile.velocity.x
+      projectile.y += projectile.velocity.y
+    }
+
+    projectile.draw()
+  }
 }
 
 animate()
