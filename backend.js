@@ -46,29 +46,27 @@ io.on('connection', (socket) => {
   //   console.log(backEndProjectiles)
   // })
 
-  socket.on('shoot', ({ angle, tempProjectileId, x, y }) => {
+  // In the shoot handler
+  socket.on('shoot', ({ angle, tempId }) => {
     const player = backEndPlayers[socket.id]
     if (!player) return
 
-    // Validate position proximity
-    const distance = Math.hypot(x - player.x, y - player.y)
-    if (distance > 50) return // Prevent position cheating
+    // Always use server's authoritative position
+    const projectileId = tempId || Date.now().toString()
+    const velocity = {
+      x: Math.cos(angle) * 5,
+      y: Math.sin(angle) * 5
+    }
 
-    // Use or generate projectile ID
-    const projectileId = tempProjectileId
-      ? tempProjectileId.replace('temp-', '')
-      : Date.now()
-
-    // Create projectile with validated position
     backEndProjectiles[projectileId] = {
-      x,
-      y,
-      velocity: {
-        x: Math.cos(angle) * 5,
-        y: Math.sin(angle) * 5
-      },
+      x: player.x, // SERVER AUTHORITATIVE POSITION
+      y: player.y,
+      velocity,
       playerId: socket.id
     }
+
+    // Immediate update for better sync
+    io.emit('updateProjectiles', backEndProjectiles)
   })
 
   socket.on('initGame', ({ username, width, height }) => {
@@ -140,42 +138,64 @@ io.on('connection', (socket) => {
 })
 
 // backend ticker
+// In backend.js setInterval callback
 setInterval(() => {
-  // update projectile positions
+  // Update projectile positions
   for (const id in backEndProjectiles) {
-    backEndProjectiles[id].x += backEndProjectiles[id].velocity.x
-    backEndProjectiles[id].y += backEndProjectiles[id].velocity.y
+    const projectile = backEndProjectiles[id]
 
+    // Update position
+    projectile.x += projectile.velocity.x
+    projectile.y += projectile.velocity.y
+
+    // Boundary checks
     const PROJECTILE_RADIUS = 5
     if (
-      backEndProjectiles[id].x - PROJECTILE_RADIUS >=
-        backEndPlayers[backEndProjectiles[id].playerId]?.canvas?.width ||
-      backEndProjectiles[id].x + PROJECTILE_RADIUS <= 0 ||
-      backEndProjectiles[id].y - PROJECTILE_RADIUS >=
-        backEndPlayers[backEndProjectiles[id].playerId]?.canvas?.height ||
-      backEndProjectiles[id].y + PROJECTILE_RADIUS <= 0
+      projectile.x - PROJECTILE_RADIUS > 1024 ||
+      projectile.x + PROJECTILE_RADIUS < 0 ||
+      projectile.y - PROJECTILE_RADIUS > 576 ||
+      projectile.y + PROJECTILE_RADIUS < 0
     ) {
       delete backEndProjectiles[id]
       continue
     }
 
-    for (const playerId in backEndPlayers) {
-      const backEndPlayer = backEndPlayers[playerId]
-
-      const DISTANCE = Math.hypot(
-        backEndProjectiles[id].x - backEndPlayer.x,
-        backEndProjectiles[id].y - backEndPlayer.y
+    // Position validation (anti-cheat)
+    const owner = backEndPlayers[projectile.playerId]
+    if (owner) {
+      const distanceFromOwner = Math.hypot(
+        projectile.x - owner.x,
+        projectile.y - owner.y
       )
 
-      // collision detection
-      if (
-        DISTANCE < PROJECTILE_RADIUS + backEndPlayer.radius &&
-        backEndProjectiles[id].playerId !== playerId
-      ) {
-        if (backEndPlayers[backEndProjectiles[id].playerId])
-          backEndPlayers[backEndProjectiles[id].playerId].score++
+      // Allow projectiles to be max 100ms old (5px/15ms * 7 frames)
+      const maxValidDistance = 5 * (100 / 15) + owner.radius + PROJECTILE_RADIUS
 
-        console.log(backEndPlayers[backEndProjectiles[id].playerId])
+      if (distanceFromOwner > maxValidDistance) {
+        delete backEndProjectiles[id]
+        continue
+      }
+    }
+
+    // Player collision detection
+    for (const playerId in backEndPlayers) {
+      const player = backEndPlayers[playerId]
+
+      // Skip collision with owner
+      if (projectile.playerId === playerId) continue
+
+      const distance = Math.hypot(
+        projectile.x - player.x,
+        projectile.y - player.y
+      )
+
+      if (distance < PROJECTILE_RADIUS + player.radius) {
+        // Handle score update
+        if (backEndPlayers[projectile.playerId]) {
+          backEndPlayers[projectile.playerId].score += 1
+        }
+
+        // Remove entities
         delete backEndProjectiles[id]
         delete backEndPlayers[playerId]
         break
@@ -183,6 +203,7 @@ setInterval(() => {
     }
   }
 
+  // Emit updates
   io.emit('updateProjectiles', backEndProjectiles)
   io.emit('updatePlayers', backEndPlayers)
 }, 15)

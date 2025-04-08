@@ -18,34 +18,37 @@ const y = canvas.height / 2
 const frontEndPlayers = {}
 const frontEndProjectiles = {}
 
-socket.on('updateProjectiles', (backEndProjectiles) => {
-  // Handle temporary projectiles
+socket.on('updateProjectiles', (serverProjectiles) => {
+  // Handle client predictions
   Object.keys(frontEndProjectiles)
-    .filter((id) => id.startsWith('temp'))
-    .forEach((tempId) => {
-      const serverId = tempId.replace('temp-', '')
-      if (backEndProjectiles[serverId]) {
-        // Replace temporary projectile with authoritative version
-        frontEndProjectiles[serverId] = frontEndProjectiles[tempId]
-        delete frontEndProjectiles[tempId]
+    .filter((id) => id.startsWith('prediction-'))
+    .forEach((predictionId) => {
+      const serverId = predictionId.replace('prediction-', '')
+      if (serverProjectiles[serverId]) {
+        // Replace prediction with authoritative projectile
+        frontEndProjectiles[serverId] = frontEndProjectiles[predictionId]
+        delete frontEndProjectiles[predictionId]
       }
     })
 
-  // Update projectile positions
-  for (const id in backEndProjectiles) {
+  // Update projectiles from server state
+  Object.entries(serverProjectiles).forEach(([id, projectile]) => {
     if (!frontEndProjectiles[id]) {
       frontEndProjectiles[id] = new Projectile({
-        ...backEndProjectiles[id],
-        color: frontEndPlayers[backEndProjectiles[id].playerId]?.color
+        ...projectile,
+        color: frontEndPlayers[projectile.playerId]?.color
       })
     } else {
-      Object.assign(frontEndProjectiles[id], backEndProjectiles[id])
+      // Maintain smooth movement while respecting server authority
+      frontEndProjectiles[id].x = projectile.x
+      frontEndProjectiles[id].y = projectile.y
+      frontEndProjectiles[id].velocity = projectile.velocity
     }
-  }
+  })
 
   // Remove stale projectiles
   Object.keys(frontEndProjectiles).forEach((id) => {
-    if (!backEndProjectiles[id] && !id.startsWith('temp')) {
+    if (!serverProjectiles[id] && !id.startsWith('prediction-')) {
       delete frontEndProjectiles[id]
     }
   })
@@ -138,20 +141,18 @@ function animate() {
   animationId = requestAnimationFrame(animate)
   c.clearRect(0, 0, canvas.width, canvas.height)
 
-  // Update players with smoother interpolation
-  for (const id in frontEndPlayers) {
-    const player = frontEndPlayers[id]
-
+  // High-precision interpolation
+  Object.values(frontEndPlayers).forEach((player) => {
     if (player.target) {
-      // Faster interpolation for better accuracy
-      player.x += (player.target.x - player.x) * 0.7
-      player.y += (player.target.y - player.y) * 0.7
+      // Aggressive interpolation for combat accuracy
+      const lerpFactor = player === frontEndPlayers[socket.id] ? 0.8 : 0.6
+      player.x += (player.target.x - player.x) * lerpFactor
+      player.y += (player.target.y - player.y) * lerpFactor
     }
-
     player.draw()
-  }
+  })
 
-  // Update projectiles
+  // Projectile rendering with velocity application
   Object.values(frontEndProjectiles).forEach((projectile) => {
     projectile.x += projectile.velocity.x
     projectile.y += projectile.velocity.y
