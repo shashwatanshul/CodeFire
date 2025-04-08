@@ -5,19 +5,19 @@ addEventListener('click', (event) => {
 
   if (!player || !player.target) return
 
-  // Use server-authoritative target position for angle calculation
+  // Calculate angle based on server-authoritative position
   const angle = Math.atan2(
     event.clientY - top - player.target.y,
     event.clientX - left - player.target.x
   )
 
-  // Client-side prediction for immediate feedback
+  // Generate temporary ID and create predictive projectile
+  const tempProjectileId = `temp-${Date.now()}`
   const velocity = {
     x: Math.cos(angle) * 5,
     y: Math.sin(angle) * 5
   }
 
-  const tempProjectileId = `temp-${Date.now()}`
   frontEndProjectiles[tempProjectileId] = new Projectile({
     x: player.target.x,
     y: player.target.y,
@@ -26,6 +26,11 @@ addEventListener('click', (event) => {
     velocity
   })
 
-  // Emit to server
-  socket.emit('shoot', { angle, tempProjectileId })
+  // Send shooting data to server
+  socket.emit('shoot', {
+    angle,
+    tempProjectileId,
+    x: player.target.x,
+    y: player.target.y
+  })
 })

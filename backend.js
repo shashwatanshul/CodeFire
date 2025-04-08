@@ -46,23 +46,27 @@ io.on('connection', (socket) => {
   //   console.log(backEndProjectiles)
   // })
 
-  socket.on('shoot', ({ angle, tempProjectileId }) => {
+  socket.on('shoot', ({ angle, tempProjectileId, x, y }) => {
     const player = backEndPlayers[socket.id]
     if (!player) return
 
-    projectileId = tempProjectileId
-      ? parseInt(tempProjectileId.replace('temp-', ''))
-      : projectileId + 1
+    // Validate position proximity
+    const distance = Math.hypot(x - player.x, y - player.y)
+    if (distance > 50) return // Prevent position cheating
 
-    const velocity = {
-      x: Math.cos(angle) * 5,
-      y: Math.sin(angle) * 5
-    }
+    // Use or generate projectile ID
+    const projectileId = tempProjectileId
+      ? tempProjectileId.replace('temp-', '')
+      : Date.now()
 
+    // Create projectile with validated position
     backEndProjectiles[projectileId] = {
-      x: player.x,
-      y: player.y,
-      velocity,
+      x,
+      y,
+      velocity: {
+        x: Math.cos(angle) * 5,
+        y: Math.sin(angle) * 5
+      },
       playerId: socket.id
     }
   })

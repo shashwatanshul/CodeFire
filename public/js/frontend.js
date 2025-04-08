@@ -19,43 +19,36 @@ const frontEndPlayers = {}
 const frontEndProjectiles = {}
 
 socket.on('updateProjectiles', (backEndProjectiles) => {
-  // Remove confirmed temporary projectiles
+  // Handle temporary projectiles
   Object.keys(frontEndProjectiles)
     .filter((id) => id.startsWith('temp'))
     .forEach((tempId) => {
-      if (backEndProjectiles[tempId.replace('temp-', '')]) {
+      const serverId = tempId.replace('temp-', '')
+      if (backEndProjectiles[serverId]) {
+        // Replace temporary projectile with authoritative version
+        frontEndProjectiles[serverId] = frontEndProjectiles[tempId]
         delete frontEndProjectiles[tempId]
       }
     })
 
-  // Update projectiles
+  // Update projectile positions
   for (const id in backEndProjectiles) {
-    const backEndProjectile = backEndProjectiles[id]
-
     if (!frontEndProjectiles[id]) {
       frontEndProjectiles[id] = new Projectile({
-        x: backEndProjectile.x,
-        y: backEndProjectile.y,
-        radius: 5,
-        color: frontEndPlayers[backEndProjectile.playerId]?.color,
-        velocity: backEndProjectile.velocity
+        ...backEndProjectiles[id],
+        color: frontEndPlayers[backEndProjectiles[id].playerId]?.color
       })
     } else {
-      frontEndProjectiles[id].x = backEndProjectile.x
-      frontEndProjectiles[id].y = backEndProjectile.y
-      frontEndProjectiles[id].velocity = backEndProjectile.velocity
+      Object.assign(frontEndProjectiles[id], backEndProjectiles[id])
     }
   }
 
-  // Cleanup old projectiles
-  for (const frontEndProjectileId in frontEndProjectiles) {
-    if (
-      !backEndProjectiles[frontEndProjectileId] &&
-      !frontEndProjectileId.startsWith('temp')
-    ) {
-      delete frontEndProjectiles[frontEndProjectileId]
+  // Remove stale projectiles
+  Object.keys(frontEndProjectiles).forEach((id) => {
+    if (!backEndProjectiles[id] && !id.startsWith('temp')) {
+      delete frontEndProjectiles[id]
     }
-  }
+  })
 })
 
 socket.on('updatePlayers', (backEndPlayers) => {
@@ -145,35 +138,25 @@ function animate() {
   animationId = requestAnimationFrame(animate)
   c.clearRect(0, 0, canvas.width, canvas.height)
 
-  // Update players with interpolation
+  // Update players with smoother interpolation
   for (const id in frontEndPlayers) {
     const player = frontEndPlayers[id]
 
     if (player.target) {
-      // Store previous position for accurate rendering
-      player.previousX = player.x
-      player.previousY = player.y
-
-      // Apply interpolation
-      player.x += (player.target.x - player.x) * 0.5
-      player.y += (player.target.y - player.y) * 0.5
+      // Faster interpolation for better accuracy
+      player.x += (player.target.x - player.x) * 0.7
+      player.y += (player.target.y - player.y) * 0.7
     }
 
     player.draw()
   }
 
   // Update projectiles
-  for (const id in frontEndProjectiles) {
-    const projectile = frontEndProjectiles[id]
-
-    // Temporary projectiles use client-side prediction
-    if (id.startsWith('temp')) {
-      projectile.x += projectile.velocity.x
-      projectile.y += projectile.velocity.y
-    }
-
+  Object.values(frontEndProjectiles).forEach((projectile) => {
+    projectile.x += projectile.velocity.x
+    projectile.y += projectile.velocity.y
     projectile.draw()
-  }
+  })
 }
 
 animate()
