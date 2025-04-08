@@ -28,7 +28,28 @@ io.on('connection', (socket) => {
 
   io.emit('updatePlayers', backEndPlayers)
 
-  socket.on('shoot', ({ x, y, angle }) => {
+  // socket.on('shoot', ({ x, y, angle }) => {
+  //   projectileId++
+
+  //   const velocity = {
+  //     x: Math.cos(angle) * 5,
+  //     y: Math.sin(angle) * 5
+  //   }
+
+  //   backEndProjectiles[projectileId] = {
+  //     x,
+  //     y,
+  //     velocity,
+  //     playerId: socket.id
+  //   }
+
+  //   console.log(backEndProjectiles)
+  // })
+
+  socket.on('shoot', ({ angle }) => {
+    const player = backEndPlayers[socket.id]
+    if (!player) return
+
     projectileId++
 
     const velocity = {
@@ -37,13 +58,11 @@ io.on('connection', (socket) => {
     }
 
     backEndProjectiles[projectileId] = {
-      x,
-      y,
+      x: player.x,
+      y: player.y, // Use server's authoritative position
       velocity,
       playerId: socket.id
     }
-
-    console.log(backEndProjectiles)
   })
 
   socket.on('initGame', ({ username, width, height }) => {
